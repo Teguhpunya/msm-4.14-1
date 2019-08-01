@@ -1146,7 +1146,7 @@ config ARCH_HAS_RELR
 
 config RELR
 	bool "Use RELR relocation packing"
-	depends on ARCH_HAS_RELR && LD_LLD
+	depends on ARCH_HAS_RELR && LD_LLD && TOOLS_SUPPORT_RELR
 	default y
 	help
 	  Store the kernel's dynamic relocations in the RELR relocation packing
