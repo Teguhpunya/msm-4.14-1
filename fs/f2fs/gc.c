@@ -26,6 +26,7 @@
 #define TRIGGER_RAPID_GC (!screen_on && power_supply_is_system_supplied())
 static bool screen_on = true;
 static LIST_HEAD(gc_sbi_list);
+static DEFINE_MUTEX(gc_wakelock_mutex);
 static DEFINE_MUTEX(gc_sbi_mutex);
 static struct wakeup_source gc_wakelock;
 
@@ -34,7 +35,7 @@ static inline void rapid_gc_set_wakelock(void)
 	struct f2fs_sb_info *sbi;
 	unsigned int set = 0;
 
-	mutex_lock(&gc_sbi_mutex);
+	mutex_lock(&gc_wakelock_mutex);
 	list_for_each_entry(sbi, &gc_sbi_list, list) {
 		set |= sbi->rapid_gc;
 	}
@@ -46,7 +47,7 @@ static inline void rapid_gc_set_wakelock(void)
 		pr_info("F2FS-fs: Unlocking wakelock for rapid GC");
 		__pm_relax(&gc_wakelock);
 	}
-	mutex_unlock(&gc_sbi_mutex);
+	mutex_unlock(&gc_wakelock_mutex);
 }
 
 static int gc_thread_func(void *data)
@@ -149,16 +150,11 @@ do_gc:
 			sbi->rapid_gc = false;
 			rapid_gc_set_wakelock();
 			sbi->gc_mode = GC_NORMAL;
-			f2fs_info(sbi,
-				"No more rapid GC victim found, "
-				"sleeping for %u ms", wait_ms);
-
 			/*
 			 * Rapid GC would have cleaned hundreds of segments
 			 * that would not be read again anytime soon.
 			 */
 			mm_drop_caches(3);
-			f2fs_info(sbi, "dropped caches");
 		}
 
 		trace_f2fs_background_gc(sbi->sb, wait_ms,
@@ -243,14 +239,6 @@ static void f2fs_start_rapid_gc(void)
 			sbi->gc_thread->gc_wake = 1;
 			wake_up_interruptible_all(&sbi->gc_thread->gc_wait_queue_head);
 			wake_up_discard_thread(sbi, true);
-		} else {
-			f2fs_info(sbi,
-					"Invalid blocks lower than %d%%, "
-					"skipping rapid GC (%u / (%u - %u))",
-					RAPID_GC_LIMIT_INVALID_BLOCK,
-					invalid_blocks,
-					sbi->user_block_count,
-					written_block_count(sbi));
 		}
 	}
 	mutex_unlock(&gc_sbi_mutex);
