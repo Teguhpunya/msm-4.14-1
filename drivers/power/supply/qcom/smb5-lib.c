@@ -36,18 +36,6 @@
 #define ATTACH_DETACH_MAX_INTERVAL ((unsigned long)400)
 #define DETACH_ATTACH_MAX_INTERVAL ((unsigned long)65)
 #endif
-#if (defined CONFIG_TOUCHSCREEN_XIAOMI_C3J) || (defined CONFIG_TOUCHSCREEN_XIAOMI_C3X)
-
-typedef struct touchscreen_usb_plugin_data {
-	bool valid;
-	bool usb_plugged_in;
-	void (*event_callback)(void);
-} touchscreen_usb_plugin_data_t;
-
-touchscreen_usb_plugin_data_t g_touchscreen_usb_pulgin = {0};
-EXPORT_SYMBOL(g_touchscreen_usb_pulgin);
-
-#endif
 
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
@@ -2366,11 +2354,6 @@ int smblib_set_prop_batt_status(struct smb_charger *chg,
 	return 0;
 }
 
-extern union power_supply_propval lct_therm_lvl_reserved;
-extern bool lct_backlight_off;
-extern int LctIsInCall;
-extern int LctThermal;
-
 int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 				const union power_supply_propval *val)
 {
@@ -2383,31 +2366,7 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 	if (val->intval > chg->thermal_levels)
 		return -EINVAL;
 
-	pr_info("%s val=%d, chg->system_temp_level=%d, LctThermal=%d, lct_backlight_off= %d, IsInCall=%d \n "
-		,__FUNCTION__,val->intval,chg->system_temp_level, LctThermal, lct_backlight_off, LctIsInCall);
-
-	if (LctThermal == 0) { //from therml-engine always store lvl_sel
-		lct_therm_lvl_reserved.intval = val->intval;
-	}
-
-	/*backlight off and not-incall, force minimum level 3*/
-	if ((lct_backlight_off) && (LctIsInCall == 0) && (val->intval > 2)) {
-		pr_info("leve ignored:backlight_off:%d level:%d",lct_backlight_off,val->intval);
-		return 0;
-	}
-
-	/*incall,force level 5*/
-	if ((LctIsInCall == 1) && (val->intval != 5)) {
-		pr_info("leve ignored:LctIsInCall:%d level:%d",LctIsInCall,val->intval);
-		return 0;
-	}
-
-	if (val->intval == chg->system_temp_level)
-		return 0;
-
 	chg->system_temp_level = val->intval;
-	pr_info("%s intval:%d system temp level:%d thermal_levels:%d",
-		__FUNCTION__,val->intval,chg->system_temp_level,chg->thermal_levels);
 
 	if (chg->system_temp_level == chg->thermal_levels)
 		return vote(chg->chg_disable_votable,
@@ -5413,13 +5372,6 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 		dual_role_instance_changed(chg->dual_role);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
-
-#if (defined CONFIG_TOUCHSCREEN_XIAOMI_C3J) || (defined CONFIG_TOUCHSCREEN_XIAOMI_C3X)
-	g_touchscreen_usb_pulgin.usb_plugged_in = vbus_rising;
-	if (g_touchscreen_usb_pulgin.valid)
-		g_touchscreen_usb_pulgin.event_callback();
-#endif
-
 }
 
 irqreturn_t usb_plugin_irq_handler(int irq, void *data)
